@@ -23,7 +23,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * 反射工具类
@@ -79,15 +78,15 @@ public final class ReflectUtil {
         }
     }
 
-    public static Optional<Class> getTargetParameterOfConverter(Class<? extends Converter> clazz) {
+    public static Class[] getTargetParameterOfConverter(Class<? extends Converter> clazz) {
         Type[] types = clazz.getGenericInterfaces();
         for (Type type : types) {
             if (!type.getTypeName().startsWith("com.github.liaochong.myexcel.core.converter.Converter")) {
                 continue;
             }
-            Type argument = ((ParameterizedType) type).getActualTypeArguments()[1];
-            return Optional.of((Class) argument);
+            Type[] arguments = ((ParameterizedType) type).getActualTypeArguments();
+            return new Class[]{(Class) arguments[0], (Class) arguments[1]};
         }
-        return Optional.empty();
+        return null;
     }
 }

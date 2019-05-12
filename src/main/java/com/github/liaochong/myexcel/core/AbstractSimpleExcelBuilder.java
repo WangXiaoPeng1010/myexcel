@@ -47,7 +47,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -407,9 +406,12 @@ public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
             converterContainer.putIfAbsent(dataType, converterMap);
         }
         try {
-            Optional<Class> originParameter = ReflectUtil.getTargetParameterOfConverter(excelColumn.converter());
-            if (originParameter.isPresent()) {
-                converterMap.putIfAbsent(field, new Pair<>(originParameter.get(), excelColumn.converter().newInstance()));
+            Class[] parameters = ReflectUtil.getTargetParameterOfConverter(excelColumn.converter());
+            if (Objects.nonNull(parameters)) {
+                if (field.getType() != parameters[0]) {
+                    throw new IllegalArgumentException("The original type of custom transformation class does not match the field");
+                }
+                converterMap.putIfAbsent(field, new Pair<>(parameters[1], excelColumn.converter().newInstance()));
             }
         } catch (InstantiationException | IllegalAccessException e) {
             throw new RuntimeException(e);
