@@ -18,7 +18,6 @@ package com.github.liaochong.myexcel.core;
 import com.github.liaochong.myexcel.core.annotation.ExcelColumn;
 import com.github.liaochong.myexcel.core.annotation.ExcelTable;
 import com.github.liaochong.myexcel.core.annotation.ExcludeColumn;
-import com.github.liaochong.myexcel.core.cache.WeakCache;
 import com.github.liaochong.myexcel.core.container.Pair;
 import com.github.liaochong.myexcel.core.container.ParallelContainer;
 import com.github.liaochong.myexcel.core.converter.Converter;
@@ -59,7 +58,7 @@ import java.util.stream.IntStream;
  */
 public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
 
-    private static WeakCache<Class<?>, Map<Field, Pair<Class, Converter>>> CONVERTER_CONTAINER = new WeakCache<>();
+    private Map<Class<?>, Map<Field, Pair<Class, Converter>>> converterContainer = new ConcurrentHashMap<>();
 
     /**
      * 一般单元格样式
@@ -402,10 +401,10 @@ public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
         if (Objects.equals(excelColumn.converter(), Converter.class)) {
             return;
         }
-        Map<Field, Pair<Class, Converter>> converterMap = CONVERTER_CONTAINER.get(dataType);
+        Map<Field, Pair<Class, Converter>> converterMap = converterContainer.get(dataType);
         if (Objects.isNull(converterMap)) {
             converterMap = new ConcurrentHashMap<>();
-            CONVERTER_CONTAINER.cache(dataType, converterMap);
+            converterContainer.putIfAbsent(dataType, converterMap);
         }
         try {
             Optional<Class> originParameter = ReflectUtil.getTargetParameterOfConverter(excelColumn.converter());
@@ -506,7 +505,7 @@ public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
         List<ParallelContainer> resolvedDataContainers = IntStream.range(0, data.size()).parallel().mapToObj(index -> {
             List<Pair<? extends Class, ?>> resolvedDataList = sortedFields.stream()
                     .map(field -> {
-                        Map<Field, Pair<Class, Converter>> converterMap = CONVERTER_CONTAINER.get(dataType);
+                        Map<Field, Pair<Class, Converter>> converterMap = converterContainer.get(dataType);
                         if (Objects.nonNull(converterMap) && Objects.nonNull(converterMap.get(field))) {
                             Pair<Class, Converter> converter = converterMap.get(field);
                             Object fieldValue;
