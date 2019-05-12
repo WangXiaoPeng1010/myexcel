@@ -15,13 +15,19 @@
  */
 package com.github.liaochong.myexcel.utils;
 
+import com.github.liaochong.myexcel.core.converter.Converter;
 import com.github.liaochong.myexcel.core.reflect.ClassFieldContainer;
 import lombok.experimental.UtilityClass;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
+ * 反射工具类
+ *
  * @author liaochong
  * @version 1.0
  */
@@ -71,5 +77,17 @@ public final class ReflectUtil {
             container.setParent(parentContainer);
             getAllFieldsOfClass(clazz.getSuperclass(), parentContainer);
         }
+    }
+
+    public static Optional<Class> getTargetParameterOfConverter(Class<? extends Converter> clazz) {
+        Type[] types = clazz.getGenericInterfaces();
+        for (Type type : types) {
+            if (!type.getTypeName().startsWith("com.github.liaochong.myexcel.core.converter.Converter")) {
+                continue;
+            }
+            Type argument = ((ParameterizedType) type).getActualTypeArguments()[1];
+            return Optional.of((Class) argument);
+        }
+        return Optional.empty();
     }
 }

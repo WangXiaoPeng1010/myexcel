@@ -18,8 +18,10 @@ package com.github.liaochong.myexcel.core;
 import com.github.liaochong.myexcel.core.annotation.ExcelColumn;
 import com.github.liaochong.myexcel.core.annotation.ExcelTable;
 import com.github.liaochong.myexcel.core.annotation.ExcludeColumn;
+import com.github.liaochong.myexcel.core.cache.WeakCache;
 import com.github.liaochong.myexcel.core.container.Pair;
 import com.github.liaochong.myexcel.core.container.ParallelContainer;
+import com.github.liaochong.myexcel.core.converter.Converter;
 import com.github.liaochong.myexcel.core.converter.WriteConverterContext;
 import com.github.liaochong.myexcel.core.parser.ContentTypeEnum;
 import com.github.liaochong.myexcel.core.parser.Table;
@@ -31,6 +33,7 @@ import com.github.liaochong.myexcel.core.style.BackgroundStyle;
 import com.github.liaochong.myexcel.core.style.BorderStyle;
 import com.github.liaochong.myexcel.core.style.FontStyle;
 import com.github.liaochong.myexcel.core.style.TextAlignStyle;
+import com.github.liaochong.myexcel.utils.ReflectUtil;
 import com.github.liaochong.myexcel.utils.StringUtil;
 import com.github.liaochong.myexcel.utils.TdUtil;
 import lombok.NonNull;
@@ -45,6 +48,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -53,6 +58,8 @@ import java.util.stream.IntStream;
  * @version 1.0
  */
 public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
+
+    private static WeakCache<Class<?>, Map<Field, Pair<Class, Converter>>> CONVERTER_CONTAINER = new WeakCache<>();
 
     /**
      * 一般单元格样式
@@ -374,6 +381,7 @@ public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
                 if (excelColumn.width() > 0) {
                     customWidthMap.put(i, excelColumn.width());
                 }
+                cacheConverter(field, excelColumn);
             } else {
                 if (useFieldNameAsTitle) {
                     titles.add(field.getName());
@@ -388,6 +396,25 @@ public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
             this.titles = titles;
         }
         return sortedFields;
+    }
+
+    private void cacheConverter(Field field, ExcelColumn excelColumn) {
+        if (Objects.equals(excelColumn.converter(), Converter.class)) {
+            return;
+        }
+        Map<Field, Pair<Class, Converter>> converterMap = CONVERTER_CONTAINER.get(dataType);
+        if (Objects.isNull(converterMap)) {
+            converterMap = new ConcurrentHashMap<>();
+            CONVERTER_CONTAINER.cache(dataType, converterMap);
+        }
+        try {
+            Optional<Class> originParameter = ReflectUtil.getTargetParameterOfConverter(excelColumn.converter());
+            if (originParameter.isPresent()) {
+                converterMap.putIfAbsent(field, new Pair<>(originParameter.get(), excelColumn.converter().newInstance()));
+            }
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private boolean filterFields(List<Class<?>> selectedGroupList, Field field) {
@@ -479,6 +506,20 @@ public abstract class AbstractSimpleExcelBuilder implements SimpleExcelBuilder {
         List<ParallelContainer> resolvedDataContainers = IntStream.range(0, data.size()).parallel().mapToObj(index -> {
             List<Pair<? extends Class, ?>> resolvedDataList = sortedFields.stream()
                     .map(field -> {
+                        Map<Field, Pair<Class, Converter>> converterMap = CONVERTER_CONTAINER.get(dataType);
+                        if (Objects.nonNull(converterMap) && Objects.nonNull(converterMap.get(field))) {
+                            Pair<Class, Converter> converter = converterMap.get(field);
+                            Object fieldValue;
+                            try {
+                                field.setAccessible(true);
+                                fieldValue = field.get(data.get(index));
+                            } catch (IllegalAccessException e) {
+                                throw new RuntimeException(e);
+                            }
+                            @SuppressWarnings("unchecked")
+                            Object result = converter.getValue().covert(fieldValue);
+                            return new Pair<>(converter.getKey(), result);
+                        }
                         Pair<? extends Class, Object> value = WriteConverterContext.convert(field, data.get(index));
                         if (Objects.nonNull(value.getValue())) {
                             return value;

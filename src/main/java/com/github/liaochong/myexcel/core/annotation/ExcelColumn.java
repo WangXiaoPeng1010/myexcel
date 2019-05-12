@@ -15,6 +15,8 @@
  */
 package com.github.liaochong.myexcel.core.annotation;
 
+import com.github.liaochong.myexcel.core.converter.Converter;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -77,4 +79,11 @@ public @interface ExcelColumn {
      * @return 宽度
      */
     int width() default -1;
+
+    /**
+     * 转换类
+     *
+     * @return 转换类
+     */
+    Class<? extends Converter> converter() default Converter.class;
 }
